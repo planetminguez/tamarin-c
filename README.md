@@ -25,7 +25,7 @@ Built it yourself using the Pico SDK, or download one of the releases. Connect t
 
 ## Hardware notes
 
-The current Tamarin-C release only supports UART & SWD with Thunderbolt 3 or USB3 cables that have the SBU pins connected. A future release will also allow UART on the data lines.
+The current Tamarin-C release supports UART & SWD with Thunderbolt 3 or USB3 cables that have the SBU pins connected. It also includes an experimental UART mode on the USB-C data lines (D+/D-).
 
 Please bare with me while I add documentation :)
 

@@ -58,6 +58,9 @@ typedef struct tamarin_configuration {
     enum PIN_MAPPING swd_pins;
     bool uart_on_initialize;
     bool probe_on_initialize;
+    // DPDN UART options
+    uint32_t dpdn_baud;       // e.g., 115200
+    bool dpdn_rx_use_dp;      // true: use D+ as RX, false: D- as RX
 
     // State
     tamarin_usb_pd *usb_pd;
@@ -69,12 +72,14 @@ typedef struct tamarin_configuration {
 } tamarin_configuration;
 
 tamarin_configuration config = {
-    .uart_pins = PIN_MAPPING_DPDN2,
+    .uart_pins = PIN_MAPPING_SBU,
     .bus1_pins = PIN_MAPPING_SBU,
     .bus2_pins = PIN_MAPPING_DPDN2,
     .swd_pins = PIN_MAPPING_SBU,
     .uart_on_initialize = false,
     .probe_on_initialize = false,
+    .dpdn_baud = 115200,
+    .dpdn_rx_use_dp = false,
     .usb_pd = &usb_pd,
     .probe_initialized = false,
     .uart_initialized = false,
@@ -109,6 +114,8 @@ struct known_actions known_actions[] = {
 
 void cmd_jtag_mode(tamarin_configuration *config);
 void cmd_uart_mode(tamarin_configuration *config);
+void cmd_uart_mode_dpdn(tamarin_configuration *config);
+void cmd_uart_dpdn_start(tamarin_configuration *config);
 
 char *get_action_description(int action_id) {
     for(int i=0; i < sizeof(known_actions)/sizeof(struct known_actions); i++) {
@@ -414,7 +421,13 @@ enum MENU_STATES {
     MENU_STATE_MAIN,
     MENU_STATE_MAPPING_SELECT_BUS,
     MENU_STATE_MAPPING_SELECT_MAPPING,
+<<<<<<< HEAD
     MENU_STATE_DEFAULT_MODE
+=======
+    MENU_STATE_DEFAULT_MODE,
+    MENU_STATE_UART_DPDN_SELECT_LINE,
+    MENU_STATE_UART_DPDN_SELECT_BAUD
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
 };
 
 typedef struct menu {
@@ -487,6 +500,43 @@ void cmd_uart_mode(tamarin_configuration *config) {
     uprintf("📜 UART mode enabled. Connect to second serial port for access.\r\n");
 }
 
+<<<<<<< HEAD
+=======
+// Enable UART using the USB-C data lines (D+/D-). Uses configured RX line and baud.
+void cmd_uart_mode_dpdn(tamarin_configuration *config) {
+    if(config->probe_initialized) {
+        uprintf("SWD already initialized. Currently only one operation type is supported.\r\n");
+        return;
+    }
+    uprintf("Configuring UART on D+/D- pins... \r\n");
+
+    uint offset = pio_add_program(config->pio, &uart_rx_program);
+    uint rx_pin = config->dpdn_rx_use_dp ? PIN_USB_DP : PIN_USB_DN;
+    uint32_t baud = (config->dpdn_baud > 0) ? config->dpdn_baud : 115200;
+    uart_rx_program_init(config->pio, config->sm, offset, rx_pin, baud);
+
+    // Power level-shifter and set DP/DN directions to input (towards RP2040)
+    gpio_init(PIN_SHIFTER_SUPPLY);
+    gpio_set_dir(PIN_SHIFTER_SUPPLY, 1);
+    gpio_put(PIN_SHIFTER_SUPPLY, 1);
+
+    gpio_init(PIN_USB_DP_DIR);
+    gpio_set_dir(PIN_USB_DP_DIR, 1);
+    gpio_put(PIN_USB_DP_DIR, SHIFTER_DIRECTION_IN);
+    gpio_init(PIN_USB_DN_DIR);
+    gpio_set_dir(PIN_USB_DN_DIR, 1);
+    gpio_put(PIN_USB_DN_DIR, SHIFTER_DIRECTION_IN);
+
+    // Ensure the VDM maps UART onto D+/D- lines by default (can be changed via 'M')
+    config->uart_pins = PIN_MAPPING_DPDN2;
+
+    config->uart_initialized = true;
+    vdm_send_uart(config);
+    uprintf("📜 UART (D+/D-) mode enabled. RX on %s, %lu baud. Connect to second serial port for access.\r\n",
+            config->dpdn_rx_use_dp ? "D+" : "D-", (unsigned long)baud);
+}
+
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
 void cmd_uart_mode_no_probe(tamarin_configuration *config) {
     uprintf("Configuring UART pins... \r\n");
     vdm_send_uart(config);
@@ -554,7 +604,12 @@ typedef struct tamarin_command {
 tamarin_command commands[] = {
     {.key = '1', .description = "JTAG Mode (with Tamarin Probe support)", .implementation = cmd_jtag_mode},
     {.key = '!', .description = "JTAG Mode (For external debugger)", .implementation = cmd_jtag_mode_no_probe},
+<<<<<<< HEAD
     {.key = '2', .description = "DCSD Mode (with UART in Tamarin)", .implementation = cmd_uart_mode},
+=======
+    {.key = '2', .description = "DCSD Mode (UART on SBU in Tamarin)", .implementation = cmd_uart_mode},
+    {.key = 'E', .description = "DCSD Mode (UART on D+/D-) - choose RX line and baud", .implementation = cmd_uart_dpdn_start},
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
     {.key = '@', .description = "DCSD Mode (For external probe)", .implementation = cmd_uart_mode_no_probe},
     {.key = '3', .description = "Reboot device", .implementation = cmd_reboot_device},
     {.key = 'A', .description = "Map internal bus 1 (ACE SPMI on iPhone 15, I2C on macs)", .implementation = cmd_map_bus1},
@@ -586,6 +641,37 @@ void print_available_mappings() {
     uprintf("> ");
 }
 
+<<<<<<< HEAD
+=======
+static void print_dpdn_line_prompt() {
+    uprintf("Select D+/D- RX line:\r\n");
+    uprintf("- 1: D- (default)\r\n");
+    uprintf("- 2: D+\r\n");
+    uprintf("- C: Cancel\r\n");
+    uprintf("> ");
+}
+
+static void print_dpdn_baud_prompt() {
+    uprintf("Select UART baud rate:\r\n");
+    uprintf("- 1: 9600\r\n");
+    uprintf("- 2: 115200 (default)\r\n");
+    uprintf("- 3: 230400\r\n");
+    uprintf("- 4: 460800\r\n");
+    uprintf("- 5: 921600\r\n");
+    uprintf("- 6: 1000000\r\n");
+    uprintf("> ");
+}
+
+void cmd_uart_dpdn_start(tamarin_configuration *config) {
+    if(config->probe_initialized) {
+        uprintf("SWD already initialized. Currently only one operation type is supported.\r\n");
+        return;
+    }
+    menu.state = MENU_STATE_UART_DPDN_SELECT_LINE;
+    print_dpdn_line_prompt();
+}
+
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
 bool probe_initialized = false;
 void handle_menu() {
     if(tud_cdc_n_available(ITF_CONSOLE)) {
@@ -629,6 +715,7 @@ void handle_menu() {
                             break;
                         case 1:
                             config.bus1_pins = mapping;
+<<<<<<< HEAD
                             uprintf("\r\nBus 1 mapping updated to: %s\r\n> ", MAPPING_TO_STRING[config.uart_pins]);
                             break;
                         case 2:
@@ -638,6 +725,17 @@ void handle_menu() {
                         case 3:
                             config.swd_pins = mapping;
                             uprintf("\r\nSWD mapping updated to: %s\r\n> ", MAPPING_TO_STRING[config.uart_pins]);
+=======
+                            uprintf("\r\nBus 1 mapping updated to: %s\r\n> ", MAPPING_TO_STRING[config.bus1_pins]);
+                            break;
+                        case 2:
+                            config.bus2_pins = mapping;
+                            uprintf("\r\nBus 2 mapping updated to: %s\r\n> ", MAPPING_TO_STRING[config.bus2_pins]);
+                            break;
+                        case 3:
+                            config.swd_pins = mapping;
+                            uprintf("\r\nSWD mapping updated to: %s\r\n> ", MAPPING_TO_STRING[config.swd_pins]);
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
                             break;
                         default:
                             uprintf("ERROR: Unsupported selected bus: %d\r\n> ", menu.mapping_selected_bus);
@@ -647,6 +745,43 @@ void handle_menu() {
                     print_available_mappings();
                 }
                 break;
+<<<<<<< HEAD
+=======
+            case MENU_STATE_UART_DPDN_SELECT_LINE:
+                if(c == '1') {
+                    config.dpdn_rx_use_dp = false;
+                    menu.state = MENU_STATE_UART_DPDN_SELECT_BAUD;
+                    print_dpdn_baud_prompt();
+                } else if(c == '2') {
+                    config.dpdn_rx_use_dp = true;
+                    menu.state = MENU_STATE_UART_DPDN_SELECT_BAUD;
+                    print_dpdn_baud_prompt();
+                } else if((c == 'C') || (c == 'c')) {
+                    menu.state = MENU_STATE_MAIN;
+                    print_menu();
+                } else {
+                    print_dpdn_line_prompt();
+                }
+                break;
+            case MENU_STATE_UART_DPDN_SELECT_BAUD:
+                switch(c) {
+                    case '1': config.dpdn_baud = 9600; break;
+                    case '2': config.dpdn_baud = 115200; break;
+                    case '3': config.dpdn_baud = 230400; break;
+                    case '4': config.dpdn_baud = 460800; break;
+                    case '5': config.dpdn_baud = 921600; break;
+                    case '6': config.dpdn_baud = 1000000; break;
+                    case 'C': case 'c': menu.state = MENU_STATE_MAIN; print_menu(); break;
+                    default:
+                        print_dpdn_baud_prompt();
+                        return;
+                }
+                if((c >= '1' && c <= '6')) {
+                    cmd_uart_mode_dpdn(&config);
+                    menu.state = MENU_STATE_MAIN;
+                }
+                break;
+>>>>>>> 84aa149 (Add D+/D- UART mode with RX/baud selection, build and flash scripts, and .gitignore)
             default:
                 printf("ERROR: Unhandled menu state: %d\r\n", menu.state);
         }

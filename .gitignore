@@ -1,0 +1,21 @@
+# OS junk
+.DS_Store
+
+# Editors/IDEs
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Generated headers
+*.pio.h
+
+# Python cache
+__pycache__/
